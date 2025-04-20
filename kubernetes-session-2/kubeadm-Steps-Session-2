@@ -1,0 +1,315 @@
+https://github.com/mialeevs/kubernetes_installation_docker
+
+Step 1-7 --> execute on master and worker both
+Step 8,10 and 11 --> on master
+Step 9 --> on worker
+
+create machines for master and worker (minimum 2 CPU and 2 GB are required) with ubuntu operating system
+===================================================================================================
+1. Add GPG key for Docker
+
+sudo su -
+wget -O - https://download.docker.com/linux/ubuntu/gpg > ./docker.key
+gpg --no-default-keyring --keyring ./docker.gpg --import ./docker.key
+gpg --no-default-keyring --keyring ./docker.gpg --export > ./docker-archive-keyring.gpg
+sudo mv ./docker-archive-keyring.gpg /etc/apt/trusted.gpg.d/
+
+2. Add docker repository and install docker
+
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+sudo apt update
+sudo apt install git wget curl -y
+sudo apt install -y docker-ce
+
+3. Install cri-dockerd for Docker support
+
+VER=$(curl -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest|grep tag_name | cut -d '"' -f 4|sed 's/v//g')
+wget https://github.com/Mirantis/cri-dockerd/releases/download/v${VER}/cri-dockerd-${VER}.amd64.tgz
+tar xvf cri-dockerd-${VER}.amd64.tgz
+chown -R root:docker cri-dockerd
+sudo mv cri-dockerd/cri-dockerd /usr/local/bin/
+wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service
+wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket
+sudo mv cri-docker.socket cri-docker.service /etc/systemd/system/
+sudo sed -i -e 's,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,' /etc/systemd/system/cri-docker.service
+sudo systemctl daemon-reload
+sudo systemctl enable cri-docker.service
+sudo systemctl enable --now cri-docker.socket
+
+4. Add the GPG key for kubernetes
+
+mkdir -p /etc/apt/keyrings/
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+
+5. Add kubernetes repository
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+
+6. Update the repositories
+
+sudo apt-get update
+
+
+7. Install Kubernetes packages.
+
+sudo apt-get install -y kubelet kubeadm kubectl
+
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+
+Optional
+========
+sudo apt-get update
+# apt-transport-https may be a dummy package; if so, you can skip that package
+sudo apt-get install -y apt-transport-https ca-certificates curl gpg
+
+
+# If the directory `/etc/apt/keyrings` does not exist, it should be created before the curl command, read the note below.
+# sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# This overwrites any existing configuration in /etc/apt/sources.list.d/kubernetes.list
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+
+sudo systemctl enable --now kubelet
+
+unix:///var/run/cri-dockerd.sock
+
+
+========
+
+
+8. Execute below command on master node to initialize kubernetes cluster
+
+sudo kubeadm init --apiserver-advertise-address=<master-ip-address> --cri-socket unix:///var/run/cri-dockerd.sock  --pod-network-cidr=10.244.0.0/16
+
+sudo kubeadm init --apiserver-advertise-address=10.128.0.8 --cri-socket unix:///var/run/cri-dockerd.sock  --pod-network-cidr=10.244.0.0/16
+
+output of init command will give you kubeadm join command that needs to be executed on worker node
+in case join command is lost we can get it again
+kubeadm token create --print-join-command
+
+
+9. Add the worker node, execute below command on worker node
+
+kubeadm join <master-ip-address>:6443 --cri-socket unix:///var/run/cri-dockerd.sock --token st99ja.3bulo53e3wlmunbk --discovery-token-ca-cert-hash sha256:41dfafa343841da6a5460f8fa89647192ec1c7f46b3029c280ff4063b940041f
+
+
+10. Deploy pod network on master, network will be created automatically on all nodes that are part of cluster
+
+There are many network plugins available calico and flannel are 2 most popular ones
+
+Flannel -->
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+
+kubectl delete -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+
+Calico --> 
+
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/tigera-operator.yaml
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/custom-resources.yaml -O
+kubectl create -f custom-resources.yaml
+
+
+11. Test operations
+
+kubectl get nodes
+kubectl run firstweb --image=nginx
+kubectl expose po firstpod --type=NodePort --port 80 --name firstsvc
+
+https://learn.microsoft.com/en-us/training/paths/github-administration-products/
+
+
+
+Output of Steps -8 Saved Here
+=============================
+
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 10.128.0.8:6443 --cri-socket unix:///var/run/cri-dockerd.sock --token j0zn9n.dtchbv9t0kycklro --discovery-token-ca-cert-hash sha256:a5ad3cea8058796edd95533d2d509f47a063ec4f91876234836743361228b930 
+root@master:~# 
+
+kubeadm join 10.128.0.8:6443 --token k21imz.7zgsbw9p8bjfyiwi --discovery-token-ca-cert-hash sha256:a5ad3cea8058796edd95533d2d509f47a063ec4f91876234836743361228b930
+
+
+
+Issues
+======
+
+Issues
+======
+
+
+credns pod is still in ContainerCreating state  and unable to run the epod
+
+
+If your CoreDNS pod is stuck in ContainerCreating state and you're unable to run ephemeral pods (kubectl run test pods), this typically indicates deeper cluster networking issues. Let's systematically troubleshoot and fix this.
+
+Step 1: Diagnose the CoreDNS Pod
+bash
+kubectl describe pod -n kube-system <coredns-pod-name> | grep -A 20 "Events"
+Look for critical errors like:
+
+Failed to create pod sandbox (CNI plugin issue)
+
+ImagePullBackOff (image download failure)
+
+Insufficient CPU/Memory (resource constraints)
+
+Step 2: Verify CNI Plugin (Flannel/Calico)
+Check CNI Pods:
+bash
+kubectl get pods -n kube-system | grep -E 'flannel|calico'
+If CrashLoopBackOff, reinstall the CNI plugin:
+
+bash
+# For Flannel:
+kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+
+# For Calico:
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+Manual CNI Config Check:
+bash
+ls /etc/cni/net.d/  # Should contain CNI config files
+cat /etc/cni/net.d/* | grep "type"
+(Ensure correct plugin type like flannel or calico is specified.)
+
+Step 3: Fix Flannel-Specific Issues
+If using Flannel and seeing /run/flannel/subnet.env errors:
+
+bash
+sudo mkdir -p /run/flannel
+cat <<EOF | sudo tee /run/flannel/subnet.env
+FLANNEL_NETWORK=10.244.0.0/16
+FLANNEL_SUBNET=10.244.0.1/24
+FLANNEL_MTU=1450
+FLANNEL_IPMASQ=true
+EOF
+sudo systemctl restart kubelet
+Step 4: Restart CoreDNS Deployment
+bash
+kubectl rollout restart deployment -n kube-system coredns
+kubectl delete pod -n kube-system -l k8s-app=kube-dns --force --grace-period=0
+Step 5: Check Node Networking
+1. Validate Network Routes:
+bash
+ip route show | grep -E 'flannel|calico|cni'
+(Should show routes for your pod CIDR, e.g., 10.244.0.0/24.)
+
+2. Verify iptables Rules:
+bash
+sudo iptables -L -n | grep -E 'KUBE|CNI'
+(Look for Kubernetes-related chains.)
+
+3. Test Basic Connectivity:
+bash
+# From the host, ping another node's internal IP
+ping <worker-node-ip>
+
+# Check if kubelet is healthy
+sudo systemctl status kubelet
+Step 6: Reinstall CoreDNS (Last Resort)
+bash
+kubectl delete -n kube-system deployment coredns
+kubectl delete -n kube-system service kube-dns
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/dns/coredns/coredns.yaml
+Step 7: Validate Fix
+Check CoreDNS status:
+
+bash
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+Test DNS resolution:
+
+bash
+kubectl run -it --rm --image=busybox:1.28 dns-test -- nslookup kubernetes.default
+Common Root Causes
+Issue	Solution
+Missing CNI Plugin	Reinstall Flannel/Calico
+/run/flannel Permissions	sudo chmod 777 /run/flannel
+Firewall Blocking	Disable firewall or allow Kubernetes ports
+kubelet Misconfiguration	Check journalctl -u kubelet
+Final Checks
+Ensure all nodes are Ready:
+
+bash
+kubectl get nodes
+Verify kube-proxy is running:
+
+bash
+kubectl get pods -n kube-system -l k8s-app=kube-proxy
+If the issue persists, provide:
+
+Output of kubectl describe pod -n kube-system <coredns-pod-name>
+
+CNI plugin logs (kubectl logs -n kube-system <cni-pod-name>)
+
+journalctl -u kubelet from the affected node(s).
+
+Let me know what you find! 🛠️
+
+
+==========================
+sudo mkdir -p /run/flannel
+cat <<EOF | sudo tee /run/flannel/subnet.env
+FLANNEL_NETWORK=10.244.0.0/16
+FLANNEL_SUBNET=10.244.0.1/24
+FLANNEL_MTU=1450
+FLANNEL_IPMASQ=true
+EOF
+sudo systemctl restart kubelet
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

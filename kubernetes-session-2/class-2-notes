@@ -1,0 +1,87 @@
+ gcloud container clusters create  hello-cluster --num-nodes=2 --> everything was done (5-10 min)
+ 
+ EKS --> 15 min
+ 
+ k8s as a service model 
+ 
+ how to deploy a k8s cluster by our own (self managed cluster)
+ 
+ Master and worker both will be in our control 
+ on-prem (on my DC, deploy k8s cluster)
+ 
+ self managed --> on DC, on-prem (I will create servers (P/V) on my customers DC)
+ 
+ high level steps 
+ 
+ 1. create the servers for deploying k8s cluster (master and worker), i will use a public cloud (AWS, GCP, azure, DO, IBM, Oracle....)
+	pre-req --> min 2 cpu and min 2GB min 10 GB of HD
+	
+ 2. Install a container runtime (install docker and also install docker CRI) containerd/CRI-O (cri is inbuilt)
+ 
+ 3. Install the kubernetes packages (kubeadm , kubectl , kubelet)
+	kubeadm --> kube admin tool (used to create k8s cluster, upgrade k8s cluster, add a new node in cluster, remove a node in cluster....cluster operations)
+ 
+ 
+ 4. Initialize my k8s cluster on master node 
+ 
+ 5. add the worker node in the cluster 
+ 
+ 
+ 6. deploy the pod network (CNI)
+ =============================================================================
+ =============================================================================
+ 
+ 
+sudo kubeadm init --apiserver-advertise-address=10.128.0.37 --cri-socket unix:///var/run/cri-dockerd.sock  --pod-network-cidr=10.244.0.0/16
+
+
+
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+ create the kubeconfig file ---> $HOME/.kube/config 
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+  
+  
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+  
+  
+  
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 10.128.0.37:6443 --cri-socket unix:///var/run/cri-dockerd.sock --token 49iml3.9iuycb2f4uaga7rz \
+        --discovery-token-ca-cert-hash sha256:bf02017044e6bf751e30c4003396ec5d412ec54631408211b6078343ab82add5
+		
+		
+		docker inc --> containerd (used with k8s)
+		
+		install docker --> containerd is also by default installed 
+		
+		docker was having containred inbuilt 
+		
+		k8s --> containerd out and ocntainred can be used with k8s 
+		
+		
+		install docker , containerd is pre-req
+		
+		
+when you install k8s --> these ns will be prsent 
+		
+kube-node-lease   Active   64m
+kube-public       Active   64m
+kube-system       Active   64m
+defualt
+
+
